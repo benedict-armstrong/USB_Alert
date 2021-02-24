@@ -18,8 +18,8 @@
 
 struct Config
 {
-  char url1[256] = "";
-  char url2[256] = "";
+  char url1[256] = "https://control-center.armstrongconsulting.com/api/agent/POWERBOT_V2_PROD/1141db85-8a03-4b4e-a8aa-8c4ff38a057b/status";
+  char url2[256] = "https://control-center.armstrongconsulting.com/api/agent/POWERBOT_V2_BACKUP/5eaa6469-87cc-48af-9c96-58c2aa0c3cc3/status";
   char refresh[10] = "100000";
 };
 
@@ -206,3 +206,4 @@ void setup() {
 }
 
 void loop() {}
+
