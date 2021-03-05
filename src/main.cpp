@@ -7,7 +7,7 @@
 #include "WiFiManager.h"          //https://github.com/tzapu/WiFiManager
 #include "WiFiClientSecure.h"
 #include <Adafruit_NeoPixel.h>
-
+#include <Ticker.h>
 #include <FS.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
@@ -16,6 +16,8 @@
 #define PIN 4
 #define NUMPIXELS 2
 
+#define TRIGGER_PIN 2
+
 struct Config
 {
   char url1[256] = "https://control-center.armstrongconsulting.com/api/agent/POWERBOT_V2_PROD/1141db85-8a03-4b4e-a8aa-8c4ff38a057b/status";
@@ -23,24 +25,62 @@ struct Config
   char refresh[10] = "100000";
 };
 
-Config config; 
+Config config;
+Ticker ticker;
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+//WiFiManager
+WiFiManager wifiManager;
+
+bool portalRunning = false;
 
 //flag for saving data
 bool shouldSaveConfig = false;
 
+void toggle(int led_num, uint32_t color) {
+  //toggle state
+  if (pixels.getPixelColor(led_num) == 0) {
+    pixels.clear();
+    pixels.setPixelColor(led_num, color);
+  } else {
+    pixels.setPixelColor(led_num, pixels.Color(0,0,0));
+  }
+  pixels.show();
+}
+
+void config_blink() {
+  toggle(0, pixels.Color(0,0,15));
+}
+
+void white1() {
+  toggle(0, pixels.Color(15,15,15));
+}
+
+void white2() {
+  toggle(1, pixels.Color(15,15,15));
+}
+
+void yellow() {
+  toggle(0, pixels.Color(15,15,0));
+  toggle(1, pixels.Color(15,15,0));
+}
+
+
 //callback notifying us of the need to save config
 void saveConfigCallback () {
   Serial.println("Should save config");
+  portalRunning = false;
   shouldSaveConfig = true;
 }
 
-Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
-
 void configModeCallback (WiFiManager *myWiFiManager) {
+  portalRunning = true;
   Serial.println("Entered config mode");
   Serial.println(WiFi.softAPIP());
   //if you used auto generated SSID, print it
   Serial.println(myWiFiManager->getConfigPortalSSID());
+  toggle(0, pixels.Color(0,0,15));
+  ticker.attach(0.6, config_blink);
 }
 
 void getConfig(){
@@ -93,18 +133,37 @@ String get_status(String host) {
     return "error";
 }
 
+void force_configuration() {
+  delay(500);
+  if (digitalRead(TRIGGER_PIN) == LOW) {
+    if(!portalRunning){
+        Serial.println("Button Pressed, Starting Portal");
+        wifiManager.startConfigPortal();
+        portalRunning = true;
+      }
+    }
+  }
+
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  
+  delay (500);
+
+  //attachInterrupt(digitalPinToInterrupt(TRIGGER_PIN), force_configuration, FALLING);
+
   LittleFS.begin();
+
+  pixels.begin();
+
+  toggle(0, pixels.Color(15,15,0));
+  ticker.attach(0.8, yellow);
 
   getConfig();
 
-  //WiFiManager
-  //Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-  //reset settings - for testing
+  pixels.setPixelColor(0, pixels.Color(15,15,15));
+  pixels.show();
+  delay(500);
 
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
@@ -129,7 +188,9 @@ void setup() {
     //reset and try again, or maybe put it to deep sleep
     ESP.reset();
     delay(1000);
-  } 
+  }
+
+  
 
   //if you get here you have connected to the WiFi
   Serial.println("connected...");
@@ -163,10 +224,11 @@ void setup() {
   }
 
 
-  pixels.begin();
-
   String status1 = "No Url (1)";
   String status2 = "No Url (2)";
+
+  // Request to URL 1v
+  ticker.attach(0.8, white1);
 
   if (host1.length() > 0 ) {
     Serial.println("Starting 1st HTTPS Request:");
@@ -176,6 +238,10 @@ void setup() {
 
   Serial.println(status1);
 
+  // Request to URL 2
+
+  ticker.attach(0.8, white2);
+
   if (host2.length() > 0) {
     Serial.println("Starting 2st HTTPS Request");
     Serial.println(host2);
@@ -184,21 +250,23 @@ void setup() {
 
   Serial.println(status2);
   
+  // Stop blinking
+  ticker.detach();
+
   pixels.clear();
 
-  pixels.setPixelColor(0, pixels.Color(100, 0, 0));
-  pixels.setPixelColor(1, pixels.Color(100, 0, 0));
+  pixels.setPixelColor(0, pixels.Color(50, 0, 0));
+  pixels.setPixelColor(1, pixels.Color(50, 0, 0));
 
   if (status1 == "OK") {
-    pixels.setPixelColor(0, pixels.Color(0, 100, 0));
+    pixels.setPixelColor(0, pixels.Color(0, 50, 0));
   }
 
   if (status2 == "OK") {
-    pixels.setPixelColor(1, pixels.Color(0, 100, 0));
+    pixels.setPixelColor(1, pixels.Color(0, 50, 0));
   }
 
   pixels.show();
-
   Serial.println("Done. Going to sleep!");
   Serial.println(atoi( ref.c_str() ));
   ESP.deepSleep(atoi( ref.c_str() ));
@@ -206,4 +274,3 @@ void setup() {
 }
 
 void loop() {}
-
